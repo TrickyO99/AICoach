@@ -26,6 +26,10 @@ npm-debug.*
 yarn-debug.*
 yarn-error.*
 
+# desktop launcher output
+web-out.log
+web-err.log
+
 # macOS
 .DS_Store
 *.pem

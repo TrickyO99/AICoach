@@ -1,62 +1,304 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
+import { Chip } from '@/components/chip';
+import { LabeledInput } from '@/components/labeled-input';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import {
+  ACTIVITY_LEVELS,
+  calculateTargets,
+  clearProfile,
+  loadProfile,
+  saveProfile,
+  type ActivityLevel,
+  type Profile,
+  type Sex,
+} from '@/lib/profile';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
+type Draft = {
+  sex: Sex;
+  age: string;
+  heightCm: string;
+  weightKg: string;
+  activityLevel: ActivityLevel;
+  trainingDaysPerWeek: string;
+  constraints: string;
+};
+
+const EMPTY_DRAFT: Draft = {
+  sex: 'male',
+  age: '',
+  heightCm: '',
+  weightKg: '',
+  activityLevel: 'moderate',
+  trainingDaysPerWeek: '4',
+  constraints: '',
+};
+
+function profileToDraft(profile: Profile): Draft {
+  return {
+    sex: profile.sex,
+    age: String(profile.age),
+    heightCm: String(profile.heightCm),
+    weightKg: String(profile.weightKg),
+    activityLevel: profile.activityLevel,
+    trainingDaysPerWeek: String(profile.trainingDaysPerWeek),
+    constraints: profile.constraints,
+  };
+}
+
+function draftToProfile(draft: Draft): Profile | null {
+  const age = parseInt(draft.age, 10);
+  const heightCm = parseInt(draft.heightCm, 10);
+  const weightKg = parseFloat(draft.weightKg);
+  const trainingDaysPerWeek = parseInt(draft.trainingDaysPerWeek, 10);
+
+  if (!age || !heightCm || !weightKg || !trainingDaysPerWeek) return null;
+
+  return {
+    sex: draft.sex,
+    age,
+    heightCm,
+    weightKg,
+    activityLevel: draft.activityLevel,
+    trainingDaysPerWeek,
+    constraints: draft.constraints.trim(),
+  };
 }
 
 export default function HomeScreen() {
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadProfile().then((stored) => {
+      setProfile(stored);
+      setEditing(!stored);
+      setLoading(false);
+    });
+  }, []);
+
+  const handleSubmit = useCallback(() => {
+    const next = draftToProfile(draft);
+    if (!next) return;
+    saveProfile(next);
+    setProfile(next);
+    setEditing(false);
+  }, [draft]);
+
+  const handleEdit = useCallback(() => {
+    if (profile) setDraft(profileToDraft(profile));
+    setEditing(true);
+  }, [profile]);
+
+  const handleReset = useCallback(() => {
+    clearProfile();
+    setProfile(null);
+    setDraft(EMPTY_DRAFT);
+    setEditing(true);
+  }, []);
+
+  if (loading) return <ThemedView style={styles.container} />;
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}>
+          {editing ? (
+            <IntakeForm draft={draft} onChange={setDraft} onSubmit={handleSubmit} />
+          ) : profile ? (
+            <ProfileSummary profile={profile} onEdit={handleEdit} onReset={handleReset} />
+          ) : null}
+        </ScrollView>
       </SafeAreaView>
+    </ThemedView>
+  );
+}
+
+function IntakeForm({
+  draft,
+  onChange,
+  onSubmit,
+}: {
+  draft: Draft;
+  onChange: (draft: Draft) => void;
+  onSubmit: () => void;
+}) {
+  const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
+    onChange({ ...draft, [key]: value });
+
+  return (
+    <ThemedView style={styles.card}>
+      <ThemedText type="subtitle">Your profile</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        Goal: fat loss / recomposition. This shapes your calorie and macro targets.
+      </ThemedText>
+
+      <ThemedView style={styles.field}>
+        <ThemedText type="small" themeColor="textSecondary">
+          Sex
+        </ThemedText>
+        <ThemedView style={styles.row}>
+          <Chip label="Male" selected={draft.sex === 'male'} onPress={() => set('sex', 'male')} />
+          <Chip
+            label="Female"
+            selected={draft.sex === 'female'}
+            onPress={() => set('sex', 'female')}
+          />
+        </ThemedView>
+      </ThemedView>
+
+      <ThemedView style={styles.row}>
+        <ThemedView style={styles.flex1}>
+          <LabeledInput
+            label="Age"
+            value={draft.age}
+            onChangeText={(v) => set('age', v)}
+            keyboardType="number-pad"
+            placeholder="28"
+          />
+        </ThemedView>
+        <ThemedView style={styles.flex1}>
+          <LabeledInput
+            label="Height (cm)"
+            value={draft.heightCm}
+            onChangeText={(v) => set('heightCm', v)}
+            keyboardType="number-pad"
+            placeholder="178"
+          />
+        </ThemedView>
+      </ThemedView>
+
+      <ThemedView style={styles.row}>
+        <ThemedView style={styles.flex1}>
+          <LabeledInput
+            label="Weight (kg)"
+            value={draft.weightKg}
+            onChangeText={(v) => set('weightKg', v)}
+            keyboardType="decimal-pad"
+            placeholder="75"
+          />
+        </ThemedView>
+        <ThemedView style={styles.flex1}>
+          <LabeledInput
+            label="Training days/week"
+            value={draft.trainingDaysPerWeek}
+            onChangeText={(v) => set('trainingDaysPerWeek', v)}
+            keyboardType="number-pad"
+            placeholder="4"
+          />
+        </ThemedView>
+      </ThemedView>
+
+      <ThemedView style={styles.field}>
+        <ThemedText type="small" themeColor="textSecondary">
+          Activity level (outside training)
+        </ThemedText>
+        <ThemedView style={styles.wrapRow}>
+          {ACTIVITY_LEVELS.map((level) => (
+            <Chip
+              key={level.value}
+              label={level.label}
+              selected={draft.activityLevel === level.value}
+              onPress={() => set('activityLevel', level.value)}
+            />
+          ))}
+        </ThemedView>
+      </ThemedView>
+
+      <LabeledInput
+        label="Injuries or constraints (optional)"
+        value={draft.constraints}
+        onChangeText={(v) => set('constraints', v)}
+        placeholder="e.g. bad left knee, no overhead pressing"
+        multiline
+      />
+
+      <ThemedView type="text" style={styles.submitButton} onTouchEnd={onSubmit}>
+        <ThemedText type="smallBold" themeColor="background">
+          Calculate my targets
+        </ThemedText>
+      </ThemedView>
+    </ThemedView>
+  );
+}
+
+function ProfileSummary({
+  profile,
+  onEdit,
+  onReset,
+}: {
+  profile: Profile;
+  onEdit: () => void;
+  onReset: () => void;
+}) {
+  const targets = calculateTargets(profile);
+
+  return (
+    <ThemedView style={styles.card}>
+      <ThemedText type="subtitle">Your targets</ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        Fat loss / recomposition · {profile.trainingDaysPerWeek}x training/week
+      </ThemedText>
+
+      <ThemedView type="backgroundElement" style={styles.statGrid}>
+        <Stat label="Calories" value={`${targets.targetCalories}`} unit="kcal/day" />
+        <Stat label="Protein" value={`${targets.proteinGrams}`} unit="g/day" />
+        <Stat label="Carbs" value={`${targets.carbGrams}`} unit="g/day" />
+        <Stat label="Fat" value={`${targets.fatGrams}`} unit="g/day" />
+      </ThemedView>
+
+      <ThemedText type="small" themeColor="textSecondary">
+        Maintenance (TDEE) is ~{targets.tdee} kcal/day. Your target is a moderate deficit to lose
+        fat while preserving muscle.
+      </ThemedText>
+
+      {profile.constraints ? (
+        <ThemedView style={styles.field}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Noted constraints
+          </ThemedText>
+          <ThemedText type="default">{profile.constraints}</ThemedText>
+        </ThemedView>
+      ) : null}
+
+      <ThemedView style={styles.row}>
+        <ThemedView
+          type="backgroundElement"
+          style={[styles.secondaryButton, styles.flex1]}
+          onTouchEnd={onEdit}>
+          <ThemedText type="smallBold">Edit profile</ThemedText>
+        </ThemedView>
+        <ThemedView
+          type="backgroundElement"
+          style={[styles.secondaryButton, styles.flex1]}
+          onTouchEnd={onReset}>
+          <ThemedText type="smallBold">Start over</ThemedText>
+        </ThemedView>
+      </ThemedView>
+    </ThemedView>
+  );
+}
+
+function Stat({ label, value, unit }: { label: string; value: string; unit: string }) {
+  return (
+    <ThemedView style={styles.stat}>
+      <ThemedText type="title" style={styles.statValue}>
+        {value}
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {unit}
+      </ThemedText>
+      <ThemedText type="smallBold" style={styles.statLabel}>
+        {label}
+      </ThemedText>
     </ThemedView>
   );
 }
@@ -64,35 +306,66 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
   },
   safeArea: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
     alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
+  },
+  scrollContent: {
+    width: '100%',
     maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
     paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
+    paddingBottom: BottomTabInset + Spacing.four,
     gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
+  },
+  card: {
+    gap: Spacing.three,
     paddingVertical: Spacing.four,
+  },
+  field: {
+    gap: Spacing.two,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: Spacing.three,
+  },
+  wrapRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  flex1: {
+    flex: 1,
+  },
+  submitButton: {
+    marginTop: Spacing.two,
+    borderRadius: Spacing.three,
+    paddingVertical: Spacing.three,
+    alignItems: 'center',
+  },
+  secondaryButton: {
+    borderRadius: Spacing.three,
+    paddingVertical: Spacing.three,
+    alignItems: 'center',
+  },
+  statGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     borderRadius: Spacing.four,
+    padding: Spacing.three,
+    gap: Spacing.three,
+  },
+  stat: {
+    width: '42%',
+    flexGrow: 1,
+    alignItems: 'center',
+    gap: Spacing.half,
+  },
+  statValue: {
+    fontSize: 28,
+    lineHeight: 32,
+  },
+  statLabel: {
+    marginTop: Spacing.one,
   },
 });
