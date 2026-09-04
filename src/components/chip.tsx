@@ -20,9 +20,12 @@ export function Chip({
       onPress={onPress}
       style={[
         styles.chip,
-        { backgroundColor: selected ? theme.text : theme.backgroundElement },
+        { backgroundColor: selected ? theme.tint : theme.backgroundElement },
       ]}>
-      <ThemedText type="smallBold" themeColor={selected ? 'background' : 'text'}>
+      <ThemedText
+        type="smallBold"
+        themeColor="text"
+        style={selected ? styles.selectedLabel : undefined}>
         {label}
       </ThemedText>
     </Pressable>
@@ -34,5 +37,8 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.three,
     borderRadius: Spacing.five,
+  },
+  selectedLabel: {
+    color: '#ffffff',
   },
 });

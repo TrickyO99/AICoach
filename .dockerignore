@@ -1,0 +1,9 @@
+node_modules
+dist
+web-err.log
+.env
+.env.*
+.git
+.expo
+android
+ios

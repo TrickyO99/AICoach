@@ -7,6 +7,7 @@ import { LabeledInput } from '@/components/labeled-input';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import {
   ACTIVITY_LEVELS,
   calculateTargets,
@@ -221,8 +222,8 @@ function IntakeForm({
         multiline
       />
 
-      <ThemedView type="text" style={styles.submitButton} onTouchEnd={onSubmit}>
-        <ThemedText type="smallBold" themeColor="background">
+      <ThemedView type="tint" style={styles.submitButton} onTouchEnd={onSubmit}>
+        <ThemedText type="smallBold" style={styles.submitButtonText}>
           Calculate my targets
         </ThemedText>
       </ThemedView>
@@ -249,7 +250,7 @@ function ProfileSummary({
       </ThemedText>
 
       <ThemedView type="backgroundElement" style={styles.statGrid}>
-        <Stat label="Calories" value={`${targets.targetCalories}`} unit="kcal/day" />
+        <Stat label="Calories" value={`${targets.targetCalories}`} unit="kcal/day" highlight />
         <Stat label="Protein" value={`${targets.proteinGrams}`} unit="g/day" />
         <Stat label="Carbs" value={`${targets.carbGrams}`} unit="g/day" />
         <Stat label="Fat" value={`${targets.fatGrams}`} unit="g/day" />
@@ -287,10 +288,24 @@ function ProfileSummary({
   );
 }
 
-function Stat({ label, value, unit }: { label: string; value: string; unit: string }) {
+function Stat({
+  label,
+  value,
+  unit,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  highlight?: boolean;
+}) {
+  const theme = useTheme();
+
   return (
     <ThemedView style={styles.stat}>
-      <ThemedText type="title" style={styles.statValue}>
+      <ThemedText
+        type="title"
+        style={[styles.statValue, highlight && { color: theme.accent }]}>
         {value}
       </ThemedText>
       <ThemedText type="small" themeColor="textSecondary">
@@ -342,6 +357,9 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.three,
     paddingVertical: Spacing.three,
     alignItems: 'center',
+  },
+  submitButtonText: {
+    color: '#ffffff',
   },
   secondaryButton: {
     borderRadius: Spacing.three,
